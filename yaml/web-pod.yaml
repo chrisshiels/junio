@@ -1,0 +1,25 @@
+---
+
+# 'web-pod.yaml'.
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  labels:
+    name: web
+spec:
+  containers:
+  - image: vm1:5000/junio/web:1.0.0
+    name: web
+    env:
+    - name: PORT
+      value: '7000'
+    - name: DATEENDPOINT
+      value: _date._tcp.date.default.svc.cluster.local
+    - name: TIMEENDPOINT
+      value: _time._tcp.time.default.svc.cluster.local
+    ports:
+    - name: web
+      containerPort: 7000

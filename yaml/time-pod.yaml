@@ -1,0 +1,21 @@
+---
+
+# 'time-pod.yaml'.
+
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: time
+  labels:
+    name: time
+spec:
+  containers:
+  - image: vm1:5000/junio/time:1.0.0
+    name: time
+    env:
+    - name: PORT
+      value: '7002'
+    ports:
+    - name: time
+      containerPort: 7002
