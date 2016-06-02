@@ -1,5 +1,6 @@
 # junio
 
+
 <!--
 - Notes:
 
@@ -154,7 +155,7 @@ Proxy-mode: iptables
     - ClusterIP
       - Expose a service for connection from inside the cluster.
 
-    - NodePort 
+    - NodePort
       - Expose a service for connection from outside the cluster.
 
     - LoadBalancer
@@ -199,11 +200,43 @@ NGINX_SERVICE_SERVICE_PORT=8000
 
 
 
+## Overview
+
+Explore deploying and running microservices in Kubernetes - a work in progress
+though everything pushed here works just fine.
+
+
+
+
+## Scenario
+
+Test environment is as follows:
+```
+rothko$ cat /etc/redhat-release
+CentOS Linux release 7.2.1511 (Core)
+
+rothko$ grep vmx /proc/cpuinfo | wc -l
+4
+
+rothko$ free -m
+              total        used        free      shared  buff/cache   available
+Mem:           7732        1399        4902         455        1430        5564
+Swap:          8187           0        8187
+
+rothko$ rpm -q vagrant
+vagrant-1.8.1-1.x86_64
+```
+
+
+
+
 ## Option 1:  Hyperkube Kubernetes deployment
 
+See:
 - http://kubernetes.io/docs/getting-started-guides/docker/
 - http://kubernetes.io/docs/getting-started-guides/docker-multinode/deployDNS/
 
+Start virtual machine:
 ```
 rothko$ sudo /sbin/iptables -I INPUT 1 -i virbr+ -j ACCEPT
 
@@ -217,8 +250,8 @@ vm1$ sudo /bin/systemctl stop firewalld.service
 vm1$ sudo /bin/systemctl disable firewalld.service
 ```
 
-Install Docker Inc's docker-engine 1.11.1 rpm as couldn't make Hyperkube work
-with CentOS' docker 1.9.1 rpm.
+Install Docker Inc's docker-engine 1.11.1 rpm as I couldn't make Hyperkube work
+with CentOS' docker 1.9.1 rpm:
 ```
 vm1$ sudo tee /etc/yum.repos.d/docker.repo <<'eof'
 [dockerrepo]
@@ -337,7 +370,10 @@ vm1$ DNS_REPLICAS=1
 vm1$ DNS_DOMAIN=cluster.local
 vm1$ DNS_SERVER_IP=10.0.0.10
 
-vm1$ sed -e "s/{{ pillar\['dns_replicas'\] }}/${DNS_REPLICAS}/g;s/{{ pillar\['dns_domain'\] }}/${DNS_DOMAIN}/g;s/{{ pillar\['dns_server'\] }}/${DNS_SERVER_IP}/g" < skydns.yaml.in > ./skydns.yaml
+vm1$ sed -e "s/{{ pillar\['dns_replicas'\] }}/${DNS_REPLICAS}/g;
+	s/{{ pillar\['dns_domain'\] }}/${DNS_DOMAIN}/g;
+	s/{{ pillar\['dns_server'\] }}/${DNS_SERVER_IP}/g" \
+	< skydns.yaml.in > ./skydns.yaml
 
 vm1$ diff ./skydns.yaml.in ./skydns.yaml
 .
@@ -366,7 +402,7 @@ vm1$ kubectl run -i --tty chris --image=centos:7 --restart=Never -- /bin/bash
 
 chris-auyn2# yum -y install bind-utils
 
-chris-auyn2# cat /etc/resolv.conf 
+chris-auyn2# cat /etc/resolv.conf
 search default.svc.cluster.local svc.cluster.local cluster.local
 nameserver 10.0.0.10
 options ndots:5
@@ -387,6 +423,8 @@ chris-auyn2# curl http://nginx/
 
 
 ## Option 2:  Cluster Kubernetes deployment
+
+Start virtual machines:
 ```
 rothko$ sudo /sbin/iptables -I INPUT 1 -i virbr+ -j ACCEPT
 
@@ -404,8 +442,7 @@ vm1234$ sudo /bin/systemctl disable firewalld
 ```
 
 
-Configure etcd:
-Required by flannel.
+Configure etcd - required by flannel:
 ```
 vm1$ sudo yum -y install etcd
 
@@ -422,10 +459,10 @@ vm1$ sudo /bin/systemctl start etcd.service
 
 
 Configure flannel:
-Note flannel has to be started before Docker, see
-https://github.com/coreos/flannel#docker-integration
-flannel writes /run/flannel/subnet.env which is picked up by
-/usr/lib/systemd/system/docker.service.d/flannel.conf.
+- Note flannel has to be started before Docker, see
+  https://github.com/coreos/flannel#docker-integration
+- flannel writes /run/flannel/subnet.env which is picked up by
+  /usr/lib/systemd/system/docker.service.d/flannel.conf.
 ```
 vm1$ etcdctl mk /junio/network/config '{ "Network" : "172.17.0.0/16" }'
 vm1$ etcdctl ls --recursive /junio/network/
@@ -453,7 +490,7 @@ vm1$ etcdctl ls --recursive /junio/network/
 
 
 Install CentOS' docker 1.9.1 rpm - this is a dependency of CentOS'
-kubernetes rpms.
+kubernetes rpms:
 ```
 vm1234$ sudo yum -y install docker
 vm1234$ sudo /bin/systemctl enable docker.service
@@ -461,7 +498,7 @@ vm1234$ sudo /bin/systemctl start docker.service
 ```
 
 
-Check Docker / flanneld integration - each node should have a different bip.
+Check Docker / flanneld integration - each node should have a different bip:
 ```
 vm234$ ps auxww | grep [d]ocker.*bip
 ```
@@ -547,11 +584,11 @@ eof
 
 vm234$ sudo /bin/systemctl enable \
 	kubelet \
-	kube-proxy 
+	kube-proxy
 
 vm234$ sudo /bin/systemctl start \
 	kubelet \
-	kube-proxy 
+	kube-proxy
 
 vm234$ /bin/systemctl --failed
 vm234$ sudo /bin/journalctl
@@ -594,9 +631,9 @@ rothko$ curl http://vm4:32708/
 
 
 Now DNS:
-Here I'm not running the Kubernetes documented configuration at
-http://kubernetes.io/docs/getting-started-guides/docker-multinode/skydns.yaml.in
-but am instead leveraging the existing etcd infrastructure.
+- Here I'm not running the Kubernetes documented configuration at
+  http://kubernetes.io/docs/getting-started-guides/docker-multinode/skydns.yaml.in
+  but am instead leveraging the existing etcd infrastructure.
 ```
 vm1$ kubectl create -f /vagrant/yaml/skydns-pod.yaml
 vm1$ kubectl create -f /vagrant/yaml/skydns-svc.yaml
@@ -622,7 +659,7 @@ vm1$ kubectl run -i --tty chris --image=centos:7 --restart=Never -- /bin/bash
 
 chris-72ntz# yum -y install bind-utils
 
-chris-72ntz# cat /etc/resolv.conf 
+chris-72ntz# cat /etc/resolv.conf
 search default.svc.cluster.local svc.cluster.local cluster.local
 nameserver 10.0.0.10
 nameserver 192.168.121.1
@@ -643,7 +680,8 @@ chris-72ntz# curl http://nginx/
 
 
 
-## Building
+## Building and publishing microservices
+
 ```
 vm1$ sudo yum -y install golang
 
@@ -668,24 +706,25 @@ vm1$ sudo docker images
 
 
 
-## Deploying
+## Deploying microservices
+
 ```
-vm1$ kubectl create -f /vagrant/yaml/date-pod.yaml 
+vm1$ kubectl create -f /vagrant/yaml/date-pod.yaml
 pod "date" created
 
-vm1$ kubectl create -f /vagrant/yaml/date-svc.yaml 
+vm1$ kubectl create -f /vagrant/yaml/date-svc.yaml
 service "date" created
 
-vm1$ kubectl create -f /vagrant/yaml/time-pod.yaml 
+vm1$ kubectl create -f /vagrant/yaml/time-pod.yaml
 pod "time" created
 
-vm1$ kubectl create -f /vagrant/yaml/time-svc.yaml 
+vm1$ kubectl create -f /vagrant/yaml/time-svc.yaml
 service "time" created
 
-vm1$ kubectl create -f /vagrant/yaml/web-pod.yaml 
+vm1$ kubectl create -f /vagrant/yaml/web-pod.yaml
 pod "web" created
 
-vm1$ kubectl create -f /vagrant/yaml/web-svc.yaml 
+vm1$ kubectl create -f /vagrant/yaml/web-svc.yaml
 You have exposed your service on an external port on all nodes in your
 cluster.  If you want to expose this service to the external internet, you may
 need to set up firewall rules for the service port(s) (tcp:30956) to serve traffic.
@@ -715,7 +754,8 @@ web          10.0.156.214   nodes         7000/TCP        40s       name=web
 
 
 
-## Testing
+## Testing microservices
+
 Testing Cluster Kubernetes deployment:
 ```
 rothko$ curl http://vm2:30956
@@ -735,16 +775,19 @@ web :
 
 Testing Hyperkube Kubernetes deployment:
 ```
-vm1$ curl http://vm1:30956/
+rothko$ curl http://vm1:30956/
 web :
 20160601 - date 
 18:20:36 - time 
-vm1$ curl http://vm1:30956/
+rothko$ curl http://vm1:30956/
 web :
 20160601 - date 
 18:20:37 - time 
+```
 
 
+Check DNS:
+```
 vm1$ kubectl attach chris-a7esi -i -t
 
 chris-syob1# getent hosts date time web
@@ -759,8 +802,8 @@ chris-syob1# dig +short _time._tcp.time.default.svc.cluster.local in srv
 chris-syob1# dig +short _web._tcp.web.default.svc.cluster.local in srv
 10 100 7000 web.default.svc.cluster.local.
 
-chris-syob1# curl http://time:7000/ ; echo
-{"time":"16:30:15","hostname":"time-4129325871-b4zpg","version":""}
+chris-syob1# curl http://time:7002/time ; echo
+{"time":"23:12:38","hostname":"time","version":""}
 ^p^q
 
 	- Awesome.
@@ -800,6 +843,7 @@ vm1$ etcdctl get /skydns/local/cluster/svc/default/date/34cd9f8a | python -m jso
 
 
 ## Querying
+
 ```
 vm1$ kubectl get namespaces
 
@@ -827,6 +871,7 @@ vm1$ kubectl logs date
 
 
 ## Adhoc container with detaching and attaching
+
 ```
 vm1$ kubectl run -i --tty chris --image=centos:7 --restart=Never -- /bin/bash
 
@@ -844,6 +889,7 @@ vm1$ kubectl delete job chris
 
 
 ## Exec shell in running container
+
 ```
 vm1$ kubectl get pods -o wide
 NAME                    READY     STATUS    RESTARTS   AGE       NODE
@@ -861,12 +907,13 @@ date# ^d
 
 
 ## To do
+
 - Fix flannel path from junio to flannel.
 - Need new go to get VERSION strings.
 - Fix warning 'Failed to get pwuid struct: user: unknown userid 4294967295'.
 - Move skydns to be a replicationcontroller.
 - Fix registry /var/lib/registry volume.
-- ● docker-storage-setup.service loaded failed failed Docker Storage Setup
+- docker-storage-setup.service loaded failed failed Docker Storage Setup
 - http://kubernetes.io/docs/hellonode/
 - http://kubernetes.io/docs/user-guide/walkthrough/
 - http://kubernetes.io/docs/user-guide/walkthrough/k8s201/
