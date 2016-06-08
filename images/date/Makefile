@@ -10,6 +10,6 @@ run:	build
 
 
 build:	Dockerfile src/github.com/chris/date/date.go
-	GOPATH=`pwd` go install -ldflags "-X main.version=$(VERSION)" github.com/chris/date
+	GOPATH=`pwd` go install -ldflags "-X main.version $(VERSION)" github.com/chris/date
 	sudo docker build -t junio/date:$(VERSION) .
 	touch $@
