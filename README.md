@@ -464,14 +464,15 @@ Configure flannel:
 - flannel writes /run/flannel/subnet.env which is picked up by
   /usr/lib/systemd/system/docker.service.d/flannel.conf.
 ```
-vm1$ etcdctl mk /junio/network/config '{ "Network" : "172.17.0.0/16" }'
-vm1$ etcdctl ls --recursive /junio/network/
+vm1$ etcdctl mk /flannel/network/config '{ "Network" : "172.17.0.0/16" }'
+vm1$ etcdctl ls --recursive /flannel/network/
+vm1$ etcdctl get /flannel/network/config
 
 vm234$ sudo yum -y install flannel
 
 vm234$ sudo tee /etc/sysconfig/flanneld <<'eof'
 FLANNEL_ETCD="http://192.168.40.11:2379"
-FLANNEL_ETCD_KEY="/junio/network"
+FLANNEL_ETCD_KEY="/flannel/network"
 FLANNEL_OPTIONS=""
 eof
 
@@ -480,12 +481,12 @@ vm234$ sudo /bin/systemctl start flanneld.service
 
 vm234$ /sbin/ip addr list flannel0
 
-vm1$ etcdctl ls --recursive /junio/network/
-/junio/network/config
-/junio/network/subnets
-/junio/network/subnets/172.17.25.0-24
-/junio/network/subnets/172.17.77.0-24
-/junio/network/subnets/172.17.91.0-24
+vm1$ etcdctl ls --recursive /flannel/network/
+/flannel/network/config
+/flannel/network/subnets
+/flannel/network/subnets/172.17.25.0-24
+/flannel/network/subnets/172.17.77.0-24
+/flannel/network/subnets/172.17.91.0-24
 ```
 
 
@@ -822,7 +823,7 @@ vm1$ etcdctl ls --recursive / | less
 
 Flannel:
 ```
-vm1$ etcdctl get /junio/network/subnets/172.17.77.0-24 | python -m json.tool
+vm1$ etcdctl get /flannel/network/subnets/172.17.77.0-24 | python -m json.tool
 ```
 
 
@@ -908,7 +909,6 @@ date# ^d
 
 ## To do
 
-- Fix flannel path from junio to flannel.
 - Need new go to get VERSION strings.
 - Fix warning 'Failed to get pwuid struct: user: unknown userid 4294967295'.
 - Move skydns to be a replicationcontroller.
