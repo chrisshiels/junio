@@ -229,6 +229,39 @@ vagrant-1.8.1-1.x86_64
 
 
 
+## Concepts:
+
+- Pod:
+  - Group of one or more containers running and sharing resources on the
+    same Kubernetes node.
+
+- Label:
+  - Key-value pairs used to organise pods into groups.
+
+- Replication Controller:
+  - Defines a Pod creation template and desired replica count.
+
+- Deployment:
+  - Defines a Pod creation template and desired replica count.
+  - Supports declarative updates and can be used to handle rolling updates
+    of new image versions.
+
+- Service:
+  - Provides a single IP to refer to a set of Pods selected by labels.
+  - Three different types:
+    - ClusterIP
+      - Default.
+      - Reachable from inside the cluster only.
+    - NodePort
+      - Configures a ClusterIP and exposes the service on all cluster nodes
+        at the same port.
+    - LoadBalancer:
+      - Configures a NodePort and requests cloud provider create a load
+        balancer.
+
+
+
+
 ## Option 1:  Hyperkube Kubernetes deployment
 
 See:
@@ -759,7 +792,7 @@ replicationcontroller "web-1-0-0" created
 
 Check:
 ```
-vm1$ kubectl get svc 
+vm1$ kubectl get svc
 NAME         CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE
 date-1-0-0   10.0.210.151   nodes         7001/TCP        1m
 kubernetes   10.0.0.1       <none>        443/TCP         46m
@@ -813,9 +846,9 @@ Check:
 ```
 vm1$ kubectl attach chris-f1o7w -i -t
 
-chris-f1o7w# dig +short date.default.svc.cluster.local in srv 
+chris-f1o7w# dig +short date.default.svc.cluster.local in srv
 10 100 7001 date-1-0-0.default.svc.cluster.local.
-chris-f1o7w# dig +short time.default.svc.cluster.local in srv 
+chris-f1o7w# dig +short time.default.svc.cluster.local in srv
 10 100 7002 time-1-0-0.default.svc.cluster.local.
 
 chris-f1o7w# curl http://date-1-0-0:7001/date ; echo
@@ -945,9 +978,9 @@ Check:
 ```
 vm1$ kubectl attach chris-f1o7w -i -t
 
-chris-f1o7w# dig +short date.default.svc.cluster.local in srv 
+chris-f1o7w# dig +short date.default.svc.cluster.local in srv
 10 100 7001 date-1-0-1.default.svc.cluster.local.
-chris-f1o7w# dig +short time.default.svc.cluster.local in srv 
+chris-f1o7w# dig +short time.default.svc.cluster.local in srv
 10 100 7002 time-1-0-0.default.svc.cluster.local.
 
 chris-f1o7w# curl http://date-1-0-0:7001/date ; echo
@@ -983,7 +1016,7 @@ web-1-0-0-51rc9 1.0.0:
 
 
 
-## Stopping data 1-0-0 microservice
+## Stopping date-1-0-0 microservice
 ```
 vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
 	sed \
@@ -1100,39 +1133,6 @@ date# ^d
 - http://rafabene.com/2015/11/11/how-expose-kubernetes-services/
 - http://kubernetes.io/docs/user-guide/services/
 - http://blog.scottlowe.org/2015/04/15/running-etcd-20-cluster/
-
-
-
-
-## Concepts:
-
-- Pod:
-  - Group of one or more containers running and sharing resources on the
-    same Kubernetes node.
-
-- Label:
-  - Key-value pairs used to organise pods into groups.
-
-- Replication Controller:
-  - Defines a Pod creation template and desired replica count.
-
-- Deployment:
-  - Defines a Pod creation template and desired replica count.
-  - Supports declarative updates and can be used to handle rolling updates
-    of new image versions.
-
-- Service:
-  - Provides a single IP to refer to a set of Pods selected by labels.
-  - Three different types:
-    - ClusterIP
-      - Default.
-      - Reachable from inside the cluster only.
-    - NodePort
-      - Configures a ClusterIP and exposes the service on all cluster nodes
-        at the same port.
-    - LoadBalancer:
-      - Configures a NodePort and requests cloud provider create a load
-        balancer.
 
 
 
