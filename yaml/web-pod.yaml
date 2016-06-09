@@ -17,9 +17,9 @@ spec:
     - name: PORT
       value: '7000'
     - name: DATEENDPOINT
-      value: _date._tcp.date.default.svc.cluster.local
+      value: date.default.svc.cluster.local
     - name: TIMEENDPOINT
-      value: _time._tcp.time.default.svc.cluster.local
+      value: time.default.svc.cluster.local
     ports:
     - name: web
       containerPort: 7000
