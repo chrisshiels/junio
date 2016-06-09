@@ -10,7 +10,7 @@ metadata:
   labels:
     name: time
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
   - name: time
     port: 7002

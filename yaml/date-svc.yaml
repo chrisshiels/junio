@@ -10,7 +10,7 @@ metadata:
   labels:
     name: date
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
   - name: date
     port: 7001
