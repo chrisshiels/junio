@@ -1,0 +1,27 @@
+---
+
+# 'date-rc.yaml'.
+
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: date
+  labels:
+    name: date
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        name: date
+    spec:
+      containers:
+      - image: vm1:5000/junio/date:1.0.0
+        name: date
+        env:
+        - name: PORT
+          value: '7001'
+        ports:
+        - name: date
+          containerPort: 7001

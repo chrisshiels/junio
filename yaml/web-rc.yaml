@@ -1,0 +1,31 @@
+---
+
+# 'web-rc.yaml'.
+
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: web
+  labels:
+    name: web
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        name: web
+    spec:
+      containers:
+      - image: vm1:5000/junio/web:1.0.0
+        name: web
+        env:
+        - name: PORT
+          value: '7000'
+        - name: DATEENDPOINT
+          value: date.default.svc.cluster.local
+        - name: TIMEENDPOINT
+          value: time.default.svc.cluster.local
+        ports:
+        - name: web
+          containerPort: 7000
