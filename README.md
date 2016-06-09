@@ -202,8 +202,7 @@ NGINX_SERVICE_SERVICE_PORT=8000
 
 ## Overview
 
-Explore deploying and running microservices in Kubernetes - a work in progress
-though everything pushed here works just fine.
+Explore blue / green microservice deployment in Kubernetes.
 
 
 
@@ -632,19 +631,20 @@ rothko$ curl http://vm4:32708/
 
 
 Now DNS:
-- Here I'm not running the Kubernetes documented configuration at
+- Note I'm not running the Kubernetes documented configuration at
   http://kubernetes.io/docs/getting-started-guides/docker-multinode/skydns.yaml.in
   but am instead leveraging the existing etcd infrastructure.
 ```
-vm1$ kubectl create -f /vagrant/yaml/skydns-pod.yaml
-vm1$ kubectl create -f /vagrant/yaml/skydns-svc.yaml
+vm1$ kubectl create -f /vagrant/yaml/skydns.yaml
 
 	- Wait...
 
 vm1$ kubectl get pods -o wide
 NAME                    READY     STATUS    RESTARTS   AGE       NODE
-nginx-198147104-rh8pr   1/1       Running   0          8m        vm4
-skydns                  2/2       Running   0          4m        vm2
+nginx-198147104-nzkkm   1/1       Running   0          7m        vm4
+skydns-ogs0l            2/2       Running   0          3m        vm2
+skydns-q824g            2/2       Running   0          2m        vm3
+skydns-xvub4            2/2       Running   0          2m        vm4
 
 vm1$ kubectl get svc -o wide
 NAME         CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE       SELECTOR
@@ -652,8 +652,8 @@ kubernetes   10.0.0.1       <none>        443/TCP         13m       <none>
 nginx        10.0.123.163   nodes         80/TCP          5m        run=nginx
 skydns       10.0.0.10      <none>        53/UDP,53/TCP   3m        name=skydns
 
-vm1$ kubectl logs skydns kube2sky
-vm1$ kubectl logs skydns skydns
+vm1$ kubectl logs skydns-ogs0l kube2sky
+vm1$ kubectl logs skydns-ogs0l skydns
 
 
 vm1$ kubectl run -i --tty chris --image=centos:7 --restart=Never -- /bin/bash
@@ -676,6 +676,7 @@ chris-72ntz# getent hosts nginx
 chris-72ntz# curl http://nginx/
 .
 .	- Cool.
+^p^q
 ```
 
 
@@ -710,46 +711,115 @@ vm1$ sudo docker images
 ## Deploying microservices
 
 ```
-vm1$ kubectl create -f /vagrant/yaml/date-pod.yaml
-pod "date" created
-
-vm1$ kubectl create -f /vagrant/yaml/date-svc.yaml
-service "date" created
-
-vm1$ kubectl create -f /vagrant/yaml/time-pod.yaml
-pod "time" created
-
-vm1$ kubectl create -f /vagrant/yaml/time-svc.yaml
-service "time" created
-
-vm1$ kubectl create -f /vagrant/yaml/web-pod.yaml
-pod "web" created
-
-vm1$ kubectl create -f /vagrant/yaml/web-svc.yaml
+vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
+	sed \
+		-e "s/{{VERSION}}/$VERSION/" \
+		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
+		/vagrant/yaml/date.yaml ) | \
+	kubectl create -f /dev/stdin
 You have exposed your service on an external port on all nodes in your
 cluster.  If you want to expose this service to the external internet, you may
-need to set up firewall rules for the service port(s) (tcp:30956) to serve traffic.
+need to set up firewall rules for the service port(s) (tcp:30155) to serve traffic.
 
 See http://releases.k8s.io/release-1.2/docs/user-guide/services-firewalls.md for more details.
-service "web" created
+service "date-1-0-0" created
+replicationcontroller "date-1-0-0" created
 
+
+vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
+	sed \
+		-e "s/{{VERSION}}/$VERSION/" \
+		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
+		/vagrant/yaml/time.yaml ) | \
+	kubectl create -f /dev/stdin
+You have exposed your service on an external port on all nodes in your
+cluster.  If you want to expose this service to the external internet, you may
+need to set up firewall rules for the service port(s) (tcp:30848) to serve traffic.
+
+See http://releases.k8s.io/release-1.2/docs/user-guide/services-firewalls.md for more details.
+service "time-1-0-0" created
+replicationcontroller "time-1-0-0" created
+
+
+vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
+	sed \
+		-e "s/{{VERSION}}/$VERSION/" \
+		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
+		/vagrant/yaml/web.yaml ) | \
+	kubectl create -f /dev/stdin
+You have exposed your service on an external port on all nodes in your
+cluster.  If you want to expose this service to the external internet, you may
+need to set up firewall rules for the service port(s) (tcp:30373) to serve traffic.
+
+See http://releases.k8s.io/release-1.2/docs/user-guide/services-firewalls.md for more details.
+service "web-1-0-0" created
+replicationcontroller "web-1-0-0" created
+```
+
+
+Check:
+```
+vm1$ kubectl get svc 
+NAME         CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE
+date-1-0-0   10.0.210.151   nodes         7001/TCP        1m
+kubernetes   10.0.0.1       <none>        443/TCP         46m
+nginx        10.0.171.130   nodes         80/TCP          30m
+skydns       10.0.0.10      <none>        53/UDP,53/TCP   29m
+time-1-0-0   10.0.23.233    nodes         7002/TCP        1m
+web-1-0-0    10.0.232.251   nodes         7000/TCP        57s
+
+vm1$ kubectl get rc
+NAME         DESIRED   CURRENT   AGE
+date-1-0-0   3         3         1m
+skydns       3         3         29m
+time-1-0-0   3         3         1m
+web-1-0-0    3         3         1m
 
 vm1$ kubectl get pods -o wide
 NAME                    READY     STATUS    RESTARTS   AGE       NODE
-chris-a7esi             1/1       Running   0          10m       vm3
-date                    1/1       Running   0          59s       vm3
-nginx-198147104-wkp4p   1/1       Running   0          13m       vm4
-skydns                  2/2       Running   0          11m       vm2
-time                    1/1       Running   0          48s       vm4
-web                     1/1       Running   0          42s       vm2
-vm1$ kubectl get svc -o wide
-NAME         CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE       SELECTOR
-date         10.0.197.3     <none>        7001/TCP        53s       name=date
-kubernetes   10.0.0.1       <none>        443/TCP         18m       <none>
-nginx        10.0.134.163   nodes         80/TCP          11m       run=nginx
-skydns       10.0.0.10      <none>        53/UDP,53/TCP   11m       name=skydns
-time         10.0.164.82    <none>        7002/TCP        47s       name=time
-web          10.0.156.214   nodes         7000/TCP        40s       name=web
+chris-tzgdh             1/1       Running   0          25m       vm3
+date-1-0-0-18sym        1/1       Running   0          1m        vm3
+date-1-0-0-4mwxt        1/1       Running   0          1m        vm4
+date-1-0-0-nnwcj        1/1       Running   0          1m        vm2
+nginx-198147104-nzkkm   1/1       Running   0          34m       vm4
+skydns-ogs0l            2/2       Running   0          29m       vm2
+skydns-q824g            2/2       Running   0          28m       vm3
+skydns-xvub4            2/2       Running   0          28m       vm4
+time-1-0-0-64tcs        1/1       Running   0          1m        vm4
+time-1-0-0-gjq8c        1/1       Running   0          1m        vm2
+time-1-0-0-jg877        1/1       Running   0          1m        vm3
+web-1-0-0-390ml         1/1       Running   0          1m        vm4
+web-1-0-0-51rc9         1/1       Running   0          1m        vm3
+web-1-0-0-mt3k4         1/1       Running   0          1m        vm2
+```
+
+
+
+
+## Update DNS
+```
+vm1$ etcdctl set /skydns/local/cluster/svc/default/date '{
+  "host": "date-1-0-0.default.svc.cluster.local.",
+  "port": 7001
+}'
+vm1$ etcdctl set /skydns/local/cluster/svc/default/time '{
+  "host": "time-1-0-0.default.svc.cluster.local.",
+  "port": 7002
+}'
+```
+
+
+Check:
+```
+vm1$ kubectl attach chris-f1o7w -i -t
+
+chris-f1o7w# dig +short date.default.svc.cluster.local in srv 
+10 100 7001 date-1-0-0.default.svc.cluster.local.
+chris-f1o7w# dig +short time.default.svc.cluster.local in srv 
+10 100 7002 time-1-0-0.default.svc.cluster.local.
+
+chris-f1o7w# curl http://date-1-0-0:7001/date ; echo
+{"date":"20160608","hostname":"date-1-0-0-nnwcj","version":"1.0.0"}
 ```
 
 
@@ -759,55 +829,168 @@ web          10.0.156.214   nodes         7000/TCP        40s       name=web
 
 Testing Cluster Kubernetes deployment:
 ```
-rothko$ curl http://vm2:30956
-web :
-20160601 - date 
-23:16:47 - time 
-rothko$ curl http://vm3:30956
-web :
-20160601 - date 
-23:16:52 - time 
-rothko$ curl http://vm4:30956
-web :
-20160601 - date 
-23:16:54 - time 
+rothko$ curl http://vm2:30373
+web-1-0-0-390ml 1.0.0:
+20160608 - date-1-0-0-4mwxt 1.0.0
+23:27:00 - time-1-0-0-jg877 1.0.0
+rothko$ curl http://vm3:30373
+web-1-0-0-mt3k4 1.0.0:
+20160608 - date-1-0-0-18sym 1.0.0
+23:27:05 - time-1-0-0-gjq8c 1.0.0
+rothko$ curl http://vm4:30373
+web-1-0-0-51rc9 1.0.0:
+20160608 - date-1-0-0-nnwcj 1.0.0
+23:27:07 - time-1-0-0-64tcs 1.0.0
 ```
 
 
 Testing Hyperkube Kubernetes deployment:
 ```
 rothko$ curl http://vm1:30956/
-web :
-20160601 - date 
-18:20:36 - time 
+web-i2fek 1.0.0:
+20160608 - date-llmg7 1.0.0
+17:05:29 - time-v3byr 1.0.0
 rothko$ curl http://vm1:30956/
-web :
-20160601 - date 
-18:20:37 - time 
+web-i2fek 1.0.0:
+20160608 - date-llmg7 1.0.0
+17:05:29 - time-v3byr 1.0.0
 ```
 
 
-Check DNS:
+
+
+## Building and publishing new version of date microservice
 ```
-vm1$ kubectl attach chris-a7esi -i -t
+vm1$ cd /vagrant/images/date/
+vm1$ rm -f build bin/date ; make build VERSION=1.0.1
+vm1$ sudo docker tag junio/date:1.0.1 vm1:5000/junio/date:1.0.1
+vm1$ sudo docker push vm1:5000/junio/date:1.0.1
+```
 
-chris-syob1# getent hosts date time web
-10.0.0.243      date.default.svc.cluster.local
-10.0.0.215      time.default.svc.cluster.local
-10.0.0.219      web.default.svc.cluster.local
 
-chris-syob1# dig +short _date._tcp.date.default.svc.cluster.local in srv
-10 100 7001 date.default.svc.cluster.local.
-chris-syob1# dig +short _time._tcp.time.default.svc.cluster.local in srv
-10 100 7002 time.default.svc.cluster.local.
-chris-syob1# dig +short _web._tcp.web.default.svc.cluster.local in srv
-10 100 7000 web.default.svc.cluster.local.
 
-chris-syob1# curl http://time:7002/time ; echo
-{"time":"23:12:38","hostname":"time","version":""}
+
+## Deploying new version of date microservice
+```
+vm1$ IMAGEVERSION=1.0.1 VERSION=1-0-1 ; (
+	sed \
+		-e "s/{{VERSION}}/$VERSION/" \
+		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
+		/vagrant/yaml/date.yaml ) | \
+	kubectl create -f /dev/stdin
+You have exposed your service on an external port on all nodes in your
+cluster.  If you want to expose this service to the external internet, you may
+need to set up firewall rules for the service port(s) (tcp:32180) to serve traffic.
+
+See http://releases.k8s.io/release-1.2/docs/user-guide/services-firewalls.md for more details.
+service "date-1-0-1" created
+replicationcontroller "date-1-0-1" created
+```
+
+
+Check:
+```
+vm1$ kubectl get svc
+NAME         CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE
+date-1-0-0   10.0.210.151   nodes         7001/TCP        7m
+date-1-0-1   10.0.89.241    nodes         7001/TCP        1m
+kubernetes   10.0.0.1       <none>        443/TCP         52m
+nginx        10.0.171.130   nodes         80/TCP          36m
+skydns       10.0.0.10      <none>        53/UDP,53/TCP   35m
+time-1-0-0   10.0.23.233    nodes         7002/TCP        7m
+web-1-0-0    10.0.232.251   nodes         7000/TCP        7m
+
+vm1$ kubectl get rc
+NAME         DESIRED   CURRENT   AGE
+date-1-0-0   3         3         8m
+date-1-0-1   3         3         1m
+skydns       3         3         36m
+time-1-0-0   3         3         7m
+web-1-0-0    3         3         7m
+
+vm1$ kubectl get pods -o wide
+NAME                    READY     STATUS    RESTARTS   AGE       NODE
+chris-tzgdh             1/1       Running   0          31m       vm3
+date-1-0-0-18sym        1/1       Running   0          8m        vm3
+date-1-0-0-4mwxt        1/1       Running   0          8m        vm4
+date-1-0-0-nnwcj        1/1       Running   0          8m        vm2
+date-1-0-1-vcsjr        1/1       Running   0          2m        vm2
+date-1-0-1-zon5j        1/1       Running   0          2m        vm4
+date-1-0-1-zra2s        1/1       Running   0          2m        vm3
+nginx-198147104-nzkkm   1/1       Running   0          40m       vm4
+skydns-ogs0l            2/2       Running   0          36m       vm2
+skydns-q824g            2/2       Running   0          35m       vm3
+skydns-xvub4            2/2       Running   0          35m       vm4
+time-1-0-0-64tcs        1/1       Running   0          8m        vm4
+time-1-0-0-gjq8c        1/1       Running   0          8m        vm2
+time-1-0-0-jg877        1/1       Running   0          8m        vm3
+web-1-0-0-390ml         1/1       Running   0          7m        vm4
+web-1-0-0-51rc9         1/1       Running   0          7m        vm3
+web-1-0-0-mt3k4         1/1       Running   0          7m        vm2
+```
+
+
+
+
+## Update DNS
+```
+vm1$ etcdctl set /skydns/local/cluster/svc/default/date '{
+  "host": "date-1-0-1.default.svc.cluster.local.",
+  "port": 7001
+}'
+```
+
+
+Check:
+```
+vm1$ kubectl attach chris-f1o7w -i -t
+
+chris-f1o7w# dig +short date.default.svc.cluster.local in srv 
+10 100 7001 date-1-0-1.default.svc.cluster.local.
+chris-f1o7w# dig +short time.default.svc.cluster.local in srv 
+10 100 7002 time-1-0-0.default.svc.cluster.local.
+
+chris-f1o7w# curl http://date-1-0-0:7001/date ; echo
+{"date":"20160608","hostname":"date-1-0-0-4mwxt","version":"1.0.0"}
+chris-f1o7w# curl http://date-1-0-1:7001/date ; echo
+{"date":"20160608","hostname":"date-1-0-1-vcsjr","version":"1.0.1"}
 ^p^q
 
 	- Awesome.
+```
+
+
+
+
+## Testing microservices
+
+Testing Cluster Kubernetes deployment:
+```
+rothko$ curl http://vm2:30373
+web-1-0-0-390ml 1.0.0:
+20160608 - date-1-0-1-zon5j 1.0.1
+23:36:47 - time-1-0-0-jg877 1.0.0
+rothko$ curl http://vm3:30373
+web-1-0-0-390ml 1.0.0:
+20160608 - date-1-0-1-zon5j 1.0.1
+23:36:49 - time-1-0-0-jg877 1.0.0
+rothko$ curl http://vm4:30373
+web-1-0-0-51rc9 1.0.0:
+20160608 - date-1-0-1-zra2s 1.0.1
+23:36:51 - time-1-0-0-64tcs 1.0.0
+```
+
+
+
+
+## Stopping data 1-0-0 microservice
+```
+vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
+	sed \
+		-e "s/{{VERSION}}/$VERSION/" \
+		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
+		/vagrant/yaml/date.yaml ) | \
+	kubectl delete -f /dev/stdin
 ```
 
 
@@ -892,15 +1075,13 @@ vm1$ kubectl delete job chris
 ## Exec shell in running container
 
 ```
-vm1$ kubectl get pods -o wide
-NAME                    READY     STATUS    RESTARTS   AGE       NODE
-date                    1/1       Running   0          17m       vm3
-nginx-198147104-wkp4p   1/1       Running   0          30m       vm4
-skydns                  2/2       Running   0          28m       vm2
-time                    1/1       Running   0          17m       vm4
-web                     1/1       Running   0          17m       vm2
+vm1$ kubectl get pods -o wide -l name=date-1-0-1
+NAME               READY     STATUS    RESTARTS   AGE       NODE
+date-1-0-1-vcsjr   1/1       Running   0          12m       vm2
+date-1-0-1-zon5j   1/1       Running   0          12m       vm4
+date-1-0-1-zra2s   1/1       Running   0          12m       vm3
 
-vm1$ kubectl exec -i -t date -- /bin/bash
+vm1$ kubectl exec -i -t date-1-0-1-vcsjr -- /bin/bash
 date# ^d
 ```
 
@@ -909,7 +1090,6 @@ date# ^d
 
 ## To do
 
-- Need new go to get VERSION strings.
 - Fix warning 'Failed to get pwuid struct: user: unknown userid 4294967295'.
 - Move skydns to be a replicationcontroller.
 - Fix registry /var/lib/registry volume.
@@ -920,3 +1100,57 @@ date# ^d
 - http://rafabene.com/2015/11/11/how-expose-kubernetes-services/
 - http://kubernetes.io/docs/user-guide/services/
 - http://blog.scottlowe.org/2015/04/15/running-etcd-20-cluster/
+
+
+
+
+## Concepts:
+
+- Pod:
+  - Group of one or more containers running and sharing resources on the
+    same Kubernetes node.
+
+- Label:
+  - Key-value pairs used to organise pods into groups.
+
+- Replication Controller:
+  - Defines a Pod creation template and desired replica count.
+
+- Deployment:
+  - Defines a Pod creation template and desired replica count.
+  - Supports declarative updates and can be used to handle rolling updates
+    of new image versions.
+
+- Service:
+  - Provides a single IP to refer to a set of Pods selected by labels.
+  - Three different types:
+    - ClusterIP
+      - Default.
+      - Reachable from inside the cluster only.
+    - NodePort
+      - Configures a ClusterIP and exposes the service on all cluster nodes
+        at the same port.
+    - LoadBalancer:
+      - Configures a NodePort and requests cloud provider create a load
+        balancer.
+
+
+
+
+<!--
+create -f
+delete -f
+
+Do services before pods/rc/deployments - though not sure why:
+"Create service before corresponding replication controllers so that the
+scheduler can spread the pods comprising the service."
+"create a Service before corresponding Deployments so that the
+scheduler can spread the pods comprising the service."
+
+Note I'm querying ClusterIPs, not PodIPs...
+
+chris-f1o7w# dig +short date-1-0-0.default.svc.cluster.local in srv
+10 100 0 a4de8a58.date-1-0-0.default.svc.cluster.local.
+chris-f1o7w# dig +short _date._tcp.date-1-0-0.default.svc.cluster.local in srv
+10 100 7001 date-1-0-0.default.svc.cluster.local.
+-->
