@@ -1,0 +1,64 @@
+---
+
+# 'skydns.yaml'.
+
+
+apiVersion: v1
+kind: Service
+metadata: 
+  name: skydns
+  labels:
+    name: skydns
+spec:
+  type: ClusterIP
+  clusterIP: 10.0.0.10
+  ports:
+  - name: dns
+    port: 53
+    protocol: UDP
+  - name: dns-tcp
+    port: 53
+    protocol: TCP
+  selector: 
+    name: skydns
+
+
+---
+
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: skydns
+  labels:
+    name: skydns
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        name: skydns
+    spec:
+      containers:
+      - image: gcr.io/google_containers/kube2sky:1.11
+        name: kube2sky
+        args:
+        - -v=10
+        - -logtostderr=true
+        - -domain=cluster.local
+        - -etcd-server=http://192.168.40.11:2379
+        - -kube_master_url=http://192.168.40.11:8080
+      - image: gcr.io/google_containers/skydns:2015-03-11-001
+        name: skydns
+        env:
+        - name: ETCD_MACHINES
+          value: http://192.168.40.11:2379
+        - name: SKYDNS_DOMAIN
+          value: cluster.local
+        - name: SKYDNS_ADDR
+          value: 0.0.0.0:53
+        - name: SKYDNS_NAMESERVERS
+          value: 8.8.8.8:53,8.8.4.4:53
+        ports:
+        - name: dns
+          containerPort: 53
+          protocol: UDP
