@@ -1124,7 +1124,6 @@ date# ^d
 ## To do
 
 - Fix warning 'Failed to get pwuid struct: user: unknown userid 4294967295'.
-- Move skydns to be a replicationcontroller.
 - Fix registry /var/lib/registry volume.
 - docker-storage-setup.service loaded failed failed Docker Storage Setup
 - http://kubernetes.io/docs/hellonode/
