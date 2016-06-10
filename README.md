@@ -487,6 +487,7 @@ eof
 
 vm1$ sudo /bin/systemctl enable etcd.service
 vm1$ sudo /bin/systemctl start etcd.service
+vm1$ sudo /bin/systemctl status etcd.service
 ```
 
 
@@ -510,6 +511,7 @@ eof
 
 vm234$ sudo /bin/systemctl enable flanneld.service
 vm234$ sudo /bin/systemctl start flanneld.service
+vm234$ sudo /bin/systemctl status flanneld.service
 
 vm234$ /sbin/ip addr list flannel0
 
@@ -528,6 +530,7 @@ kubernetes rpms:
 vm1234$ sudo yum -y install docker
 vm1234$ sudo /bin/systemctl enable docker.service
 vm1234$ sudo /bin/systemctl start docker.service
+vm1234$ sudo /bin/systemctl status docker.service
 ```
 
 
@@ -547,6 +550,7 @@ vm1234$ sudo cp \
         /vagrant/ssl/vm1.crt \
         /etc/docker/certs.d/vm1:5000/ca.crt
 vm1234$ sudo /bin/systemctl restart docker.service
+vm1234$ sudo /bin/systemctl status docker.service
 ```
 
 
@@ -715,6 +719,20 @@ chris-72ntz# curl http://nginx/
 
 
 
+## Build templater utility
+
+The Kubernetes kubectl utility doesn't currently have any templating support
+so the following utility is here as a workaround.
+```
+vm1$ sudo yum -y install golang
+
+vm1$ cd /vagrant/templater
+vm1$ make
+```
+
+
+
+
 ## Building and publishing microservices
 
 ```
@@ -744,12 +762,9 @@ vm1$ sudo docker images
 ## Deploying microservices
 
 ```
-vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
-	sed \
-		-e "s/{{VERSION}}/$VERSION/" \
-		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
-		/vagrant/yaml/date.yaml ) | \
-	kubectl create -f /dev/stdin
+vm1$ /vagrant/templater/templater \
+	VERSION=1.0.0 \
+	/vagrant/yaml/date.yaml.template | kubectl create -f /dev/stdin
 You have exposed your service on an external port on all nodes in your
 cluster.  If you want to expose this service to the external internet, you may
 need to set up firewall rules for the service port(s) (tcp:30155) to serve traffic.
@@ -759,12 +774,9 @@ service "date-1-0-0" created
 replicationcontroller "date-1-0-0" created
 
 
-vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
-	sed \
-		-e "s/{{VERSION}}/$VERSION/" \
-		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
-		/vagrant/yaml/time.yaml ) | \
-	kubectl create -f /dev/stdin
+vm1$ /vagrant/templater/templater \
+	VERSION=1.0.0 \
+	/vagrant/yaml/time.yaml.template | kubectl create -f /dev/stdin
 You have exposed your service on an external port on all nodes in your
 cluster.  If you want to expose this service to the external internet, you may
 need to set up firewall rules for the service port(s) (tcp:30848) to serve traffic.
@@ -774,12 +786,9 @@ service "time-1-0-0" created
 replicationcontroller "time-1-0-0" created
 
 
-vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
-	sed \
-		-e "s/{{VERSION}}/$VERSION/" \
-		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
-		/vagrant/yaml/web.yaml ) | \
-	kubectl create -f /dev/stdin
+vm1$ /vagrant/templater/templater \
+	VERSION=1.0.0 \
+	/vagrant/yaml/web.yaml.template | kubectl create -f /dev/stdin
 You have exposed your service on an external port on all nodes in your
 cluster.  If you want to expose this service to the external internet, you may
 need to set up firewall rules for the service port(s) (tcp:30373) to serve traffic.
@@ -860,6 +869,14 @@ chris-f1o7w# curl http://date-1-0-0:7001/date ; echo
 
 ## Testing microservices
 
+Query the port:
+```
+vm1$ kubectl get svc web-1-0-0 \
+	--template='{{(index .spec.ports 0).nodePort}}' ; echo
+30373
+```
+
+
 Testing Cluster Kubernetes deployment:
 ```
 rothko$ curl http://vm2:30373
@@ -905,12 +922,9 @@ vm1$ sudo docker push vm1:5000/junio/date:1.0.1
 
 ## Deploying new version of date microservice
 ```
-vm1$ IMAGEVERSION=1.0.1 VERSION=1-0-1 ; (
-	sed \
-		-e "s/{{VERSION}}/$VERSION/" \
-		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
-		/vagrant/yaml/date.yaml ) | \
-	kubectl create -f /dev/stdin
+vm1$ /vagrant/templater/templater \
+	VERSION=1.0.1 \
+	/vagrant/yaml/date.yaml.template | kubectl create -f /dev/stdin
 You have exposed your service on an external port on all nodes in your
 cluster.  If you want to expose this service to the external internet, you may
 need to set up firewall rules for the service port(s) (tcp:32180) to serve traffic.
@@ -1018,12 +1032,9 @@ web-1-0-0-51rc9 1.0.0:
 
 ## Stopping date-1-0-0 microservice
 ```
-vm1$ IMAGEVERSION=1.0.0 VERSION=1-0-0 ; (
-	sed \
-		-e "s/{{VERSION}}/$VERSION/" \
-		-e "s/{{IMAGEVERSION}}/$IMAGEVERSION/" \
-		/vagrant/yaml/date.yaml ) | \
-	kubectl delete -f /dev/stdin
+vm1$ /vagrant/templater/templater \
+	VERSION=1.0.0 \
+	/vagrant/yaml/date.yaml.template | kubectl delete -f /dev/stdin
 ```
 
 
@@ -1045,15 +1056,19 @@ vm1$ etcdctl get /flannel/network/subnets/172.17.77.0-24 | python -m json.tool
 
 Kubernetes:
 ```
-vm1$ etcdctl get /registry/pods/default/date | python -m json.tool
-vm1$ etcdctl get /registry/services/specs/default/date | python -m json.tool
+vm1$ etcdctl get /registry/controllers/default/date-1-0-1 | \
+	python -m json.tool
+vm1$ etcdctl get /registry/services/specs/default/date-1-0-1 | \
+	python -m json.tool
 ```
 
 
 SkyDNS:
 ```
-vm1$ etcdctl get /skydns/local/cluster/default/date | python -m json.tool
-vm1$ etcdctl get /skydns/local/cluster/svc/default/date/34cd9f8a | python -m json.tool
+vm1$ etcdctl get /skydns/local/cluster/default/date-1-0-1 | \
+	python -m json.tool
+vm1$ etcdctl get /skydns/local/cluster/svc/default/date | \
+	python -m json.tool
 ```
 
 
@@ -1075,13 +1090,14 @@ vm1$ kubectl get svc -o wide
 More detail:
 ```
 vm1$ kubectl get pod nginx-198147104-wkp4p -o json
-vm1$ kubectl get svc nginx --template='{{(index .spec.ports 0).nodePort}}'
+vm1$ kubectl get svc nginx \
+	--template='{{(index .spec.ports 0).nodePort}}' ; echo
 ```
 
 
 Logs:
 ```
-vm1$ kubectl logs date
+vm1$ kubectl logs nginx-198147104-ymsjr
 ```
 
 
@@ -1126,10 +1142,6 @@ date# ^d
 - Fix warning 'Failed to get pwuid struct: user: unknown userid 4294967295'.
 - Fix registry /var/lib/registry volume.
 - docker-storage-setup.service loaded failed failed Docker Storage Setup
-- http://kubernetes.io/docs/hellonode/
-- http://kubernetes.io/docs/user-guide/walkthrough/
-- http://kubernetes.io/docs/user-guide/walkthrough/k8s201/
-- http://rafabene.com/2015/11/11/how-expose-kubernetes-services/
 - http://kubernetes.io/docs/user-guide/services/
 - http://blog.scottlowe.org/2015/04/15/running-etcd-20-cluster/
 
