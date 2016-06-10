@@ -13,15 +13,9 @@
     - "a distributed key-value datastore that manages cluster-wide information
        and provides service discovery.
 
-  - Flannel:
-    - "an overlay network fabric enabling container connectivity across
-       multiple servers."
 
 
   - etcd.
-
-  - flanneld - overlay network.
-    - Stores configuration in etcd.
 
   - Comprises a master and a set of nodes.
 
@@ -72,20 +66,8 @@
      containers.  The Kubernetes Volume abstraction solves both of these
      problems."
 
-  - PodIP
-
-  - ClusterIP
-
 
 - Concepts:
-
-  - Pod:
-    - Group of one or more Docker containers running on the same host.
-
-  - Replication Controller:
-    - Manage the lifecycle of pods.
-    - The controller maintains a desired number of pod replicas and will
-      automatically create or kill pods as necessary.
 
   - Services:
     - Collections of pods that are exposed with a single and stable name and
@@ -93,34 +75,8 @@
     - The service provides load balancing to the underlying pods,
       with or without an external load balancer.
 
-  - Label
-    - A simple name-value pair.
-
-  - Hyperkube:
-    - All-in-one binary running Kubernetes cluster.
-
-  - PodIP
-
-  - ClusterIP
-
 
 - Networking:
-
-  "Valid values for the ServiceType field are:"
-
-   ClusterIP
-   - Default.
-   - Reachable from inside the cluster only.
-
-   NodePort
-   - "On top of having a cluster-internal IP, expose the service on a port on
-      each node of the cluster (the same port on each node)."
-   - "You’ll be able to contact the service on any <NodeIP>:NodePort address."
-
-   LoadBalancer
-   - "On top of having a cluster-internal IP and exposing service on a NodePort
-      also, ask the cloud provider for a load balancer which forwards to the
-      Service exposed as a <NodeIP>:NodePort for each Node."
 
    "Unlike Pod IP addresses, which actually route to a fixed destination,
     Service IPs are not actually answered by a single host.  Instead, we use
@@ -150,16 +106,6 @@ Proxy-mode: iptables
   the Service’s IP:Port is proxied to an appropriate backend without the
   clients knowing anything about Kubernetes or Services or Pods.
 
-  - Service types:
-
-    - ClusterIP
-      - Expose a service for connection from inside the cluster.
-
-    - NodePort
-      - Expose a service for connection from outside the cluster.
-
-    - LoadBalancer
-      -
 
   - http://kubernetes.io/docs/user-guide/services/#type-nodeport
     "If you set the type field to "NodePort", the Kubernetes master will
@@ -229,7 +175,7 @@ vagrant-1.8.1-1.x86_64
 
 
 
-## Concepts:
+## Notes - Concepts
 
 - Pod:
   - Group of one or more containers running and sharing resources on the
@@ -240,6 +186,7 @@ vagrant-1.8.1-1.x86_64
 
 - Replication Controller:
   - Defines a Pod creation template and desired replica count.
+  - Automatically creates and kills pods as necessary.
 
 - Deployment:
   - Defines a Pod creation template and desired replica count.
@@ -262,7 +209,63 @@ vagrant-1.8.1-1.x86_64
 
 
 
+## Notes - flannel
+
+- See:  https://github.com/coreos/flannel
+
+- Overlay network used with Kubernetes to support PodIPs, i.e. each pod has
+  it's own IP address.
+
+- Alternatives include Weave Net.
+
+- Configuration and state stored in etcd.
+
+- Configuration includes network range to use for overlay network, e.g.
+  172.17.0.0/16.
+
+- Each host runs flanneld process, self-allocates a /24 subnet from the overlay
+  network, e.g. 172.17.24.0/16, configures the flannel0 device and stores
+  state in etcd, e.g. /flannel/network/subnets/172.17.25.0-24.
+
+- Implemented through different backends: udp, vxlan, aws-vpc, etc.
+
+
+
+
+## Notes - Networking
+
+- PodIP
+  - Implemented via flannel using network range configured in etcd.
+
+- ClusterIP
+  - Implemented via iptables using network range configured in
+    /etc/kubernetes/apiserver setting KUBE_SERVICE_ADDRESSES:
+```
+-A KUBE-SEP-3SYDRZYPSRWRWL4L -s 172.17.24.5/32 -m comment --comment "default/time-1-0-0:time" -j KUBE-MARK-MASQ
+-A KUBE-SEP-3SYDRZYPSRWRWL4L -p tcp -m comment --comment "default/time-1-0-0:time" -m tcp -j DNAT --to-destination 172.17.24.5:7002
+-A KUBE-SEP-72RMBGD2NVGMJYUB -s 172.17.75.5/32 -m comment --comment "default/time-1-0-0:time" -j KUBE-MARK-MASQ
+-A KUBE-SEP-72RMBGD2NVGMJYUB -p tcp -m comment --comment "default/time-1-0-0:time" -m tcp -j DNAT --to-destination 172.17.75.5:7002
+-A KUBE-SEP-NTHXK4HOYZTL553L -s 172.17.55.4/32 -m comment --comment "default/time-1-0-0:time" -j KUBE-MARK-MASQ
+-A KUBE-SEP-NTHXK4HOYZTL553L -p tcp -m comment --comment "default/time-1-0-0:time" -m tcp -j DNAT --to-destination 172.17.55.4:7002
+-A KUBE-SERVICES -d 10.0.220.159/32 -p tcp -m comment --comment "default/time-1-0-0:time cluster IP" -m tcp --dport 7002 -j KUBE-SVC-RCVCLTNF2OHHYZAH
+-A KUBE-SVC-RCVCLTNF2OHHYZAH -m comment --comment "default/time-1-0-0:time" -m statistic --mode random --probability 0.33332999982 -j KUBE-SEP-3SYDRZYPSRWRWL4L
+-A KUBE-SVC-RCVCLTNF2OHHYZAH -m comment --comment "default/time-1-0-0:time" -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-NTHXK4HOYZTL553L
+-A KUBE-SVC-RCVCLTNF2OHHYZAH -m comment --comment "default/time-1-0-0:time" -j KUBE-SEP-72RMBGD2NVGMJYUB
+```
+
+- NodePort
+  - Implemented via iptables:
+```
+-A KUBE-NODEPORTS -p tcp -m comment --comment "default/time-1-0-0:time" -m tcp --dport 30879 -j KUBE-MARK-MASQ
+-A KUBE-NODEPORTS -p tcp -m comment --comment "default/time-1-0-0:time" -m tcp --dport 30879 -j KUBE-SVC-RCVCLTNF2OHHYZAH
+```
+
+
+
+
 ## Option 1:  Hyperkube Kubernetes deployment
+
+"hyperkube is an all-in-one binary for the Kubernetes server components."
 
 See:
 - http://kubernetes.io/docs/getting-started-guides/docker/
