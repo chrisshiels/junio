@@ -494,10 +494,16 @@ vm1$ sudo /bin/systemctl status etcd.service
 Configure flannel:
 - Note flannel has to be started before Docker, see
   https://github.com/coreos/flannel#docker-integration
-- flannel writes /run/flannel/subnet.env which is picked up by
+- flannel writes /run/flannel/docker which is picked up by
   /usr/lib/systemd/system/docker.service.d/flannel.conf.
 ```
-vm1$ etcdctl mk /flannel/network/config '{ "Network" : "172.17.0.0/16" }'
+vm1$ etcdctl mk /flannel/network/config '{
+  "Network": "172.17.0.0/16",
+  "Backend": {
+    "Type": "udp",
+    "Port": 8285
+  }
+}'
 vm1$ etcdctl ls --recursive /flannel/network/
 vm1$ etcdctl get /flannel/network/config
 
