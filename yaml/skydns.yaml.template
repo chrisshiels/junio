@@ -5,7 +5,7 @@
 
 apiVersion: v1
 kind: Service
-metadata: 
+metadata:
   name: skydns
   labels:
     name: skydns
@@ -19,7 +19,7 @@ spec:
   - name: dns-tcp
     port: 53
     protocol: TCP
-  selector: 
+  selector:
     name: skydns
 
 
@@ -39,19 +39,29 @@ spec:
         name: skydns
     spec:
       containers:
-      - image: gcr.io/google_containers/kube2sky:1.11
+      - image: gcr.io/google_containers/etcd-amd64:2.2.1
+        name: etcd
+        command:
+        - /usr/local/bin/etcd
+        - -proxy
+        - "on"
+        - -initial-cluster
+        - {{ index . "ETCD_INITIAL_CLUSTER" }}
+        - -listen-client-urls
+        - http://127.0.0.1:2379
+      - image: gcr.io/google_containers/kube2sky:1.12
         name: kube2sky
         args:
         - -v=10
         - -logtostderr=true
         - -domain=cluster.local
-        - -etcd-server=http://192.168.40.11:2379
+        - -etcd-server=http://127.0.0.1:2379
         - -kube_master_url=http://192.168.40.11:8080
-      - image: gcr.io/google_containers/skydns:2015-03-11-001
+      - image: gcr.io/google_containers/skydns:2015-10-13-8c72f8c
         name: skydns
         env:
         - name: ETCD_MACHINES
-          value: http://192.168.40.11:2379
+          value: http://127.0.0.1:2379
         - name: SKYDNS_DOMAIN
           value: cluster.local
         - name: SKYDNS_ADDR

@@ -263,6 +263,67 @@ vagrant-1.8.1-1.x86_64
 
 
 
+## Notes - etcd
+
+- "etcd is a distributed key value store that provides a reliable way to store
+   data across a cluster of machines."
+
+
+- Ports:
+  - etcd-client:  tcp/2379  etcd client communication.
+  - etcd-server:  tcp/2380  etcd server to server / peer communication.
+  - tcp/4001 and tcp/7001 are legacy.
+
+
+- See:
+  - https://coreos.com/etcd/docs/latest/clustering.html
+  - https://coreos.com/os/docs/latest/cluster-architectures.html
+  - https://www.youtube.com/watch?v=duUTk8xxGbU
+    "CoreOS: Bootstrapping etcd"
+
+
+- Clustering options are:
+  - Static.
+  - etcd Discovery.
+  - DNS Discovery.
+
+
+- Here I'm using static discovery and suspect DNS Discovery would work well
+  in the cloud for non-asg instances.
+
+
+- https://coreos.com/etcd/docs/latest/configuration.html#clustering-flags
+  - "-initial prefix flags are used in bootstrapping (static bootstrap,
+     discovery-service bootstrap or runtime reconfiguration) a new member,
+     and ignored when restarting an existing member."
+
+
+- https://coreos.com/etcd/docs/latest/faq.html#how-does---endpoint-work-with-etcdctl
+  - How does -endpoint work with etcdctl?
+    - "If only one peer is specified via the -endpoint flag, the etcdctl
+       discovers the rest of the cluster via the member list of that one peer,
+       and then it randomly chooses a member to use."
+
+    - "Note: -peers flag is now deprecated and -endpoint should be used
+       instead, as it might confuse users to give etcdctl a peerURL.
+
+
+
+
+## Build templater utility
+
+The Kubernetes kubectl utility doesn't currently have any templating support
+so the following utility is here as a workaround.
+```
+vm1$ sudo yum -y install golang
+
+vm1$ cd /vagrant/templater
+vm1$ make
+```
+
+
+
+
 ## Option 1:  Hyperkube Kubernetes deployment
 
 "hyperkube is an all-in-one binary for the Kubernetes server components."
@@ -477,43 +538,95 @@ vm1234$ sudo /bin/systemctl disable firewalld
 ```
 
 
-Configure etcd - required by flannel:
+Configure etcd - required by Flannel, Kubernetes and SkyDNS:
 ```
-vm1$ sudo yum -y install etcd
+vm1234$ sudo yum -y install etcd
 
-vm1$ sudo tee /etc/etcd/etcd.conf <<'eof'
-ETCD_NAME=default
+
+vm2$ sudo tee /etc/etcd/etcd.conf <<eof
+ETCD_NAME="vm2"
 ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+
+ETCD_INITIAL_CLUSTER="vm2=http://192.168.40.12:2380,vm3=http://192.168.40.13:2380,vm4=http://192.168.40.14:2380"
+ETCD_INITIAL_CLUSTER_STATE="new"
+ETCD_INITIAL_CLUSTER_TOKEN="etcdcluster"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://192.168.40.12:2380"
+
+ETCD_LISTEN_PEER_URLS="http://192.168.40.12:2380"
 ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
-ETCD_ADVERTISE_CLIENT_URLS="http://192.168.40.11:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://192.168.40.12:2379"
 eof
 
-vm1$ sudo /bin/systemctl enable etcd.service
-vm1$ sudo /bin/systemctl start etcd.service
-vm1$ sudo /bin/systemctl status etcd.service
+
+vm3$ sudo tee /etc/etcd/etcd.conf <<eof
+ETCD_NAME="vm3"
+ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+
+ETCD_INITIAL_CLUSTER="vm2=http://192.168.40.12:2380,vm3=http://192.168.40.13:2380,vm4=http://192.168.40.14:2380"
+ETCD_INITIAL_CLUSTER_STATE="new"
+ETCD_INITIAL_CLUSTER_TOKEN="etcdcluster"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://192.168.40.13:2380"
+
+ETCD_LISTEN_PEER_URLS="http://192.168.40.13:2380"
+ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://192.168.40.13:2379"
+eof
+
+
+vm4$ sudo tee /etc/etcd/etcd.conf <<eof
+ETCD_NAME="vm4"
+ETCD_DATA_DIR="/var/lib/etcd/default.etcd"
+
+ETCD_INITIAL_CLUSTER="vm2=http://192.168.40.12:2380,vm3=http://192.168.40.13:2380,vm4=http://192.168.40.14:2380"
+ETCD_INITIAL_CLUSTER_STATE="new"
+ETCD_INITIAL_CLUSTER_TOKEN="etcdcluster"
+ETCD_INITIAL_ADVERTISE_PEER_URLS="http://192.168.40.14:2380"
+
+ETCD_LISTEN_PEER_URLS="http://192.168.40.14:2380"
+ETCD_LISTEN_CLIENT_URLS="http://0.0.0.0:2379"
+ETCD_ADVERTISE_CLIENT_URLS="http://192.168.40.14:2379"
+eof
+
+
+vm234$ sudo /bin/systemctl enable etcd.service
+vm234$ sudo /bin/systemctl start etcd.service
+vm234$ sudo /bin/systemctl status etcd.service
 ```
+
+
+Check:
+```
+vm1234$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 member list
+vm1234$ ETCDCTL_ENDPOINT=http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 etcdctl cluster-health
+vm234$ curl -s http://localhost:2379/v2/stats/self | python -mjson.tool
+vm234$ curl -s http://localhost:2379/v2/members | python -mjson.tool
+```
+
+
 
 
 Configure flannel:
+- See:
+  - https://github.com/coreos/flannel
 - Note flannel has to be started before Docker, see
   https://github.com/coreos/flannel#docker-integration
 - flannel writes /run/flannel/docker which is picked up by
   /usr/lib/systemd/system/docker.service.d/flannel.conf.
 ```
-vm1$ etcdctl mk /flannel/network/config '{
+vm1$ etcdctl -endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 mk /flannel/network/config '{
   "Network": "172.17.0.0/16",
   "Backend": {
     "Type": "udp",
     "Port": 8285
   }
 }'
-vm1$ etcdctl ls --recursive /flannel/network/
-vm1$ etcdctl get /flannel/network/config
+vm1$ etcdctl -endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 ls --recursive /flannel/network/
+vm1$ etcdctl -endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 get /flannel/network/config
 
 vm234$ sudo yum -y install flannel
 
 vm234$ sudo tee /etc/sysconfig/flanneld <<'eof'
-FLANNEL_ETCD="http://192.168.40.11:2379"
+FLANNEL_ETCD="http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379"
 FLANNEL_ETCD_KEY="/flannel/network"
 FLANNEL_OPTIONS=""
 eof
@@ -524,7 +637,7 @@ vm234$ sudo /bin/systemctl status flanneld.service
 
 vm234$ /sbin/ip addr list flannel0
 
-vm1$ etcdctl ls --recursive /flannel/network/
+vm1$ etcdctl -endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 ls --recursive /flannel/network/
 /flannel/network/config
 /flannel/network/subnets
 /flannel/network/subnets/172.17.25.0-24
@@ -587,7 +700,7 @@ vm1$ sudo tee /etc/kubernetes/apiserver <<'eof'
 KUBE_API_ADDRESS="--address=0.0.0.0"
 KUBE_API_PORT="--port=8080"
 KUBELET_PORT="--kubelet_port=10250"
-KUBE_ETCD_SERVERS="--etcd_servers=http://127.0.0.1:2379"
+KUBE_ETCD_SERVERS="--etcd_servers=http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379"
 KUBE_SERVICE_ADDRESSES="--service-cluster-ip-range=10.0.0.0/16"
 KUBE_ADMISSION_CONTROL="--admission_control=NamespaceLifecycle,NamespaceExists,LimitRanger,SecurityContextDeny,ResourceQuota"
 KUBE_API_ARGS=""
@@ -599,6 +712,11 @@ vm1$ sudo /bin/systemctl enable \
 	kube-scheduler
 
 vm1$ sudo /bin/systemctl start \
+	kube-apiserver \
+	kube-controller-manager \
+	kube-scheduler
+
+vm1$ sudo /bin/systemctl status \
 	kube-apiserver \
 	kube-controller-manager \
 	kube-scheduler
@@ -633,6 +751,10 @@ vm234$ sudo /bin/systemctl enable \
 	kube-proxy
 
 vm234$ sudo /bin/systemctl start \
+	kubelet \
+	kube-proxy
+
+vm234$ sudo /bin/systemctl status \
 	kubelet \
 	kube-proxy
 
@@ -680,17 +802,22 @@ Now DNS:
 - Note I'm not running the Kubernetes documented configuration at
   http://kubernetes.io/docs/getting-started-guides/docker-multinode/skydns.yaml.in
   but am instead leveraging the existing etcd infrastructure.
+
+- Note also that I've not been able to find a version of kube2sky that lets
+  you specify multiple etcd servers...
 ```
-vm1$ kubectl create -f /vagrant/yaml/skydns.yaml
+vm1$ /vagrant/templater/templater \
+	ETCD_INITIAL_CLUSTER="vm2=http://192.168.40.12:2380,vm3=http://192.168.40.13:2380,vm4=http://192.168.40.14:2380" \
+	/vagrant/yaml/skydns.yaml.template | kubectl create -f /dev/stdin
 
 	- Wait...
 
 vm1$ kubectl get pods -o wide
 NAME                    READY     STATUS    RESTARTS   AGE       NODE
 nginx-198147104-nzkkm   1/1       Running   0          7m        vm4
-skydns-ogs0l            2/2       Running   0          3m        vm2
-skydns-q824g            2/2       Running   0          2m        vm3
-skydns-xvub4            2/2       Running   0          2m        vm4
+skydns-ogs0l            3/3       Running   0          3m        vm2
+skydns-q824g            3/3       Running   0          2m        vm3
+skydns-xvub4            3/3       Running   0          2m        vm4
 
 vm1$ kubectl get svc -o wide
 NAME         CLUSTER-IP     EXTERNAL-IP   PORT(S)         AGE       SELECTOR
@@ -698,6 +825,7 @@ kubernetes   10.0.0.1       <none>        443/TCP         13m       <none>
 nginx        10.0.123.163   nodes         80/TCP          5m        run=nginx
 skydns       10.0.0.10      <none>        53/UDP,53/TCP   3m        name=skydns
 
+vm1$ kubectl logs skydns-ogs0l etcd
 vm1$ kubectl logs skydns-ogs0l kube2sky
 vm1$ kubectl logs skydns-ogs0l skydns
 
@@ -723,20 +851,6 @@ chris-72ntz# curl http://nginx/
 .
 .	- Cool.
 ^p^q
-```
-
-
-
-
-## Build templater utility
-
-The Kubernetes kubectl utility doesn't currently have any templating support
-so the following utility is here as a workaround.
-```
-vm1$ sudo yum -y install golang
-
-vm1$ cd /vagrant/templater
-vm1$ make
 ```
 
 
@@ -833,9 +947,9 @@ date-1-0-0-18sym        1/1       Running   0          1m        vm3
 date-1-0-0-4mwxt        1/1       Running   0          1m        vm4
 date-1-0-0-nnwcj        1/1       Running   0          1m        vm2
 nginx-198147104-nzkkm   1/1       Running   0          34m       vm4
-skydns-ogs0l            2/2       Running   0          29m       vm2
-skydns-q824g            2/2       Running   0          28m       vm3
-skydns-xvub4            2/2       Running   0          28m       vm4
+skydns-ogs0l            3/3       Running   0          29m       vm2
+skydns-q824g            3/3       Running   0          28m       vm3
+skydns-xvub4            3/3       Running   0          28m       vm4
 time-1-0-0-64tcs        1/1       Running   0          1m        vm4
 time-1-0-0-gjq8c        1/1       Running   0          1m        vm2
 time-1-0-0-jg877        1/1       Running   0          1m        vm3
@@ -849,11 +963,11 @@ web-1-0-0-mt3k4         1/1       Running   0          1m        vm2
 
 ## Update DNS
 ```
-vm1$ etcdctl set /skydns/local/cluster/svc/default/date '{
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 set /skydns/local/cluster/svc/default/date '{
   "host": "date-1-0-0.default.svc.cluster.local.",
   "port": 7001
 }'
-vm1$ etcdctl set /skydns/local/cluster/svc/default/time '{
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 set /skydns/local/cluster/svc/default/time '{
   "host": "time-1-0-0.default.svc.cluster.local.",
   "port": 7002
 }'
@@ -871,6 +985,7 @@ chris-f1o7w# dig +short time.default.svc.cluster.local in srv
 
 chris-f1o7w# curl http://date-1-0-0:7001/date ; echo
 {"date":"20160608","hostname":"date-1-0-0-nnwcj","version":"1.0.0"}
+^p^q
 ```
 
 
@@ -974,9 +1089,9 @@ date-1-0-1-vcsjr        1/1       Running   0          2m        vm2
 date-1-0-1-zon5j        1/1       Running   0          2m        vm4
 date-1-0-1-zra2s        1/1       Running   0          2m        vm3
 nginx-198147104-nzkkm   1/1       Running   0          40m       vm4
-skydns-ogs0l            2/2       Running   0          36m       vm2
-skydns-q824g            2/2       Running   0          35m       vm3
-skydns-xvub4            2/2       Running   0          35m       vm4
+skydns-ogs0l            3/3       Running   0          36m       vm2
+skydns-q824g            3/3       Running   0          35m       vm3
+skydns-xvub4            3/3       Running   0          35m       vm4
 time-1-0-0-64tcs        1/1       Running   0          8m        vm4
 time-1-0-0-gjq8c        1/1       Running   0          8m        vm2
 time-1-0-0-jg877        1/1       Running   0          8m        vm3
@@ -990,7 +1105,7 @@ web-1-0-0-mt3k4         1/1       Running   0          7m        vm2
 
 ## Update DNS
 ```
-vm1$ etcdctl set /skydns/local/cluster/svc/default/date '{
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 set /skydns/local/cluster/svc/default/date '{
   "host": "date-1-0-1.default.svc.cluster.local.",
   "port": 7001
 }'
@@ -1053,30 +1168,28 @@ vm1$ /vagrant/templater/templater \
 
 This is being used to store configuration for Flannel, Kubernetes and SkyDNS:
 ```
-vm1$ etcdctl ls --recursive / | less
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 ls --recursive / | sort | less
 ```
 
 
 Flannel:
 ```
-vm1$ etcdctl get /flannel/network/subnets/172.17.77.0-24 | python -m json.tool
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 get /flannel/network/subnets/172.17.77.0-24 | python -m json.tool
 ```
 
 
 Kubernetes:
 ```
-vm1$ etcdctl get /registry/controllers/default/date-1-0-1 | \
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 get /registry/controllers/default/date-1-0-1 | \
 	python -m json.tool
-vm1$ etcdctl get /registry/services/specs/default/date-1-0-1 | \
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 get /registry/services/specs/default/date-1-0-1 | \
 	python -m json.tool
 ```
 
 
 SkyDNS:
 ```
-vm1$ etcdctl get /skydns/local/cluster/default/date-1-0-1 | \
-	python -m json.tool
-vm1$ etcdctl get /skydns/local/cluster/svc/default/date | \
+vm1$ etcdctl --endpoint http://192.168.40.12:2379,http://192.168.40.13:2379,http://192.168.40.14:2379 get /skydns/local/cluster/svc/default/date-1-0-1/4a918566 | \
 	python -m json.tool
 ```
 
@@ -1140,7 +1253,7 @@ date-1-0-1-zon5j   1/1       Running   0          12m       vm4
 date-1-0-1-zra2s   1/1       Running   0          12m       vm3
 
 vm1$ kubectl exec -i -t date-1-0-1-vcsjr -- /bin/bash
-date# ^d
+date-1-0-1-0kerr# ^d
 ```
 
 
@@ -1152,7 +1265,6 @@ date# ^d
 - Fix registry /var/lib/registry volume.
 - docker-storage-setup.service loaded failed failed Docker Storage Setup
 - http://kubernetes.io/docs/user-guide/services/
-- http://blog.scottlowe.org/2015/04/15/running-etcd-20-cluster/
 
 
 
