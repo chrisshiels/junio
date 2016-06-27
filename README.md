@@ -1265,6 +1265,7 @@ date-1-0-1-0kerr# ^d
 - Fix registry /var/lib/registry volume.
 - docker-storage-setup.service loaded failed failed Docker Storage Setup
 - http://kubernetes.io/docs/user-guide/services/
+- See:  http://blog.kubernetes.io/2016/06/illustrated-childrens-guide-to-kubernetes.html
 
 
 
